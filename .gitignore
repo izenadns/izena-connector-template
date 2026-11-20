@@ -1,0 +1,24 @@
+# Go build and test output
+/bin/
+/dist/
+/coverage/
+*.coverprofile
+*.test
+
+# Local development state and secrets
+/.local/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.secret
+
+# Local Go workspace
+/go.work
+/go.work.sum
+
+# Tool caches and temporary output
+/.cache/
+/.tmp/
+/tmp/

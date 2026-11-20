@@ -1,0 +1,27 @@
+version: 2
+
+builds:
+  - skip: true
+
+source:
+  enabled: true
+
+sboms:
+  - artifacts: source
+    cmd: go
+    args:
+      - run
+      - github.com/anchore/syft/cmd/syft@v1.57.1
+      - '$artifact'
+      - --output
+      - 'spdx-json=$document'
+
+checksum:
+  disable: true
+
+changelog:
+  disable: true
+
+# Release Please owns the GitHub release. GoReleaser only packages its assets.
+release:
+  disable: true

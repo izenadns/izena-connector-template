@@ -1,0 +1,124 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - CHANGELOG.md
+      - release-please-manifest.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  GOWORK: "off"
+
+jobs:
+  formatting:
+    name: go formatting
+    if: &run-checks >-
+      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main')
+          || (github.event_name == 'pull_request'
+            && !(github.event.pull_request.head.repo.full_name == github.repository
+              && github.event.pull_request.head.ref == 'release-please--branches--main'
+              && github.event.pull_request.base.ref == 'main')) }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - &checkout
+        name: check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - &setup-go
+        name: set up go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.mod
+            go.sum
+      - name: check go formatting
+        run: make fmt-check
+
+  lint:
+    name: go lint
+    if: *run-checks
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - *setup-go
+      - name: lint go packages
+        run: make lint
+
+  security:
+    name: go dependency security
+    if: *run-checks
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - *setup-go
+      - name: scan go dependencies
+        run: make security
+
+  modules:
+    name: go module dependencies
+    if: *run-checks
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - *setup-go
+      - name: check go module dependencies
+        run: make module-check
+
+  unit:
+    name: go unit tests
+    needs: [formatting, lint, security, modules]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *setup-go
+      - name: run go unit tests
+        run: make test
+
+  integration:
+    name: connector integration tests
+    needs: unit
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *setup-go
+      - name: test against the disposable HTTP fixture
+        run: make test-integration-fixtures
+
+  release-please:
+    name: update release pull request
+    needs: integration
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: run release please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # A PAT lets generated pull requests trigger workflows.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: release-please-manifest.json
+          skip-github-release: true
